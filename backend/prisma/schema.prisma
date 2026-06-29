@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  administrador
+  supervisor
+  funcionario
+  comercial
+
+  @@map("user_role")
+}
+
+enum RecordStatus {
+  ativo
+  inativo
+
+  @@map("record_status")
+}
+
+enum StockMovementType {
+  entrada
+  saida
+  ajuste
+
+  @@map("stock_movement_type")
+}
+
+model Employee {
+  id             Int       @id @default(autoincrement())
+  name           String    @db.VarChar(160)
+  position       String    @db.VarChar(120)
+  barcode        String?   @unique @db.VarChar(100)
+  dailyWage      Decimal   @default(55) @map("daily_wage") @db.Decimal(14, 2)
+  shiftHours     Decimal   @default(8) @map("shift_hours") @db.Decimal(8, 2)
+  status         RecordStatus @default(ativo)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  users          User[]
+  responsibleBatches ProductionBatch[] @relation("BatchResponsible")
+  rawMaterialMovements RawMaterialMovement[]
+  productionSteps ProductionStep[]
+  timeClockRecords TimeClockRecord[]
+  scannedMovements ProductionScanMovement[] @relation("ScannedBy")
+  producedMovements ProductionScanMovement[] @relation("ProducedBy")
+  wrappedMovements ProductionScanMovement[] @relation("WrappedBy")
+  packedMovements ProductionScanMovement[] @relation("PackedBy")
+
+  @@map("employees")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  employeeId   Int?      @map("employee_id")
+  name         String    @db.VarChar(160)
+  email        String    @unique @db.VarChar(180)
+  passwordHash String    @map("password_hash")
+  role         UserRole
+  status       RecordStatus @default(ativo)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@map("users")
+}
+
+model Product {
+  id                           Int       @id @default(autoincrement())
+  name                         String    @db.VarChar(180)
+  sku                          String    @unique @db.VarChar(80)
+  color                        String?   @db.VarChar(80)
+  weight                       Decimal   @default(0) @db.Decimal(14, 3)
+  unit                         String    @default("unidade") @db.VarChar(40)
+  unitsPerPackage              Decimal   @default(1) @map("units_per_package") @db.Decimal(14, 3)
+  packagesPerBox               Decimal   @default(1) @map("packages_per_box") @db.Decimal(14, 3)
+  packageBarcode               String?   @unique @map("package_barcode") @db.VarChar(100)
+  boxBarcode                   String?   @unique @map("box_barcode") @db.VarChar(100)
+  materialCostPerUnit          Decimal   @default(0) @map("material_cost_per_unit") @db.Decimal(14, 4)
+  status                       RecordStatus @default(ativo)
+  finishedStockQuantity        Decimal   @default(0) @map("finished_stock_quantity") @db.Decimal(14, 3)
+  finishedStockPackageQuantity Decimal   @default(0) @map("finished_stock_package_quantity") @db.Decimal(14, 3)
+  finishedStockBoxQuantity     Decimal   @default(0) @map("finished_stock_box_quantity") @db.Decimal(14, 3)
+  createdAt                    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  batches                      ProductionBatch[]
+  finishedStockMovements       FinishedStockMovement[]
+  integrationLogs              IntegrationLog[]
+  rawMaterials                 ProductRawMaterial[]
+  scanMovements                ProductionScanMovement[]
+
+  @@index([sku])
+  @@index([packageBarcode])
+  @@index([boxBarcode])
+  @@map("products")
+}
+
+model RawMaterial {
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(180)
+  unit         String    @db.VarChar(40)
+  barcode      String?   @unique @db.VarChar(100)
+  unitCost     Decimal   @default(0) @map("unit_cost") @db.Decimal(14, 4)
+  currentStock Decimal   @default(0) @map("current_stock") @db.Decimal(14, 3)
+  minimumStock Decimal   @default(0) @map("minimum_stock") @db.Decimal(14, 3)
+  status       RecordStatus @default(ativo)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  movements    RawMaterialMovement[]
+  products     ProductRawMaterial[]
+
+  @@index([currentStock, minimumStock])
+  @@index([barcode])
+  @@map("raw_materials")
+}
+
+model ProductRawMaterial {
+  id            Int       @id @default(autoincrement())
+  productId     Int       @map("product_id")
+  rawMaterialId Int       @map("raw_material_id")
+  quantityPerUnit Decimal @default(0) @map("quantity_per_unit") @db.Decimal(14, 6)
+  wastePercent  Decimal   @default(0) @map("waste_percent") @db.Decimal(8, 3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rawMaterial   RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, rawMaterialId])
+  @@index([productId])
+  @@map("product_raw_materials")
+}
+
+model ProductionBatch {
+  id                    Int       @id @default(autoincrement())
+  lotNumber             String    @unique @map("lot_number") @db.VarChar(40)
+  productId             Int       @map("product_id")
+  plannedQuantity       Decimal   @map("planned_quantity") @db.Decimal(14, 3)
+  responsibleEmployeeId Int?      @map("responsible_employee_id")
+  startedAt             DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  currentStage          String    @default("producao_inicial") @map("current_stage") @db.VarChar(60)
+  status                String    @default("em_producao") @db.VarChar(40)
+  stockedQuantity       Decimal   @default(0) @map("stocked_quantity") @db.Decimal(14, 3)
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  product               Product   @relation(fields: [productId], references: [id])
+  responsibleEmployee   Employee? @relation("BatchResponsible", fields: [responsibleEmployeeId], references: [id])
+  rawMaterialMovements  RawMaterialMovement[]
+  productionSteps       ProductionStep[]
+  finishedStockMovements FinishedStockMovement[]
+  integrationLogs       IntegrationLog[]
+  scanMovements         ProductionScanMovement[]
+
+  @@index([currentStage])
+  @@index([status])
+  @@map("production_batches")
+}
+
+model RawMaterialMovement {
+  id                    Int       @id @default(autoincrement())
+  rawMaterialId         Int       @map("raw_material_id")
+  productionBatchId     Int?      @map("production_batch_id")
+  movementType          StockMovementType @map("movement_type")
+  quantity              Decimal   @db.Decimal(14, 3)
+  reason                String    @db.VarChar(160)
+  createdByEmployeeId   Int?      @map("created_by_employee_id")
+  occurredAt            DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  notes                 String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  rawMaterial           RawMaterial @relation(fields: [rawMaterialId], references: [id])
+  productionBatch       ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  createdByEmployee     Employee? @relation(fields: [createdByEmployeeId], references: [id])
+
+  @@map("raw_material_movements")
+}
+
+model ProductionStep {
+  id                Int       @id @default(autoincrement())
+  productionBatchId Int       @map("production_batch_id")
+  stage             String    @db.VarChar(60)
+  employeeId        Int?      @map("employee_id")
+  quantityDone      Decimal   @default(0) @map("quantity_done") @db.Decimal(14, 3)
+  lossesQuantity    Decimal   @default(0) @map("losses_quantity") @db.Decimal(14, 3)
+  startedAt         DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime? @map("finished_at") @db.Timestamptz(6)
+  observations      String?
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  productionBatch   ProductionBatch @relation(fields: [productionBatchId], references: [id], onDelete: Cascade)
+  employee          Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([productionBatchId])
+  @@map("production_steps")
+}
+
+model FinishedStockMovement {
+  id                Int       @id @default(autoincrement())
+  productId         Int       @map("product_id")
+  productionBatchId Int?      @map("production_batch_id")
+  movementType      StockMovementType @map("movement_type")
+  quantity          Decimal   @db.Decimal(14, 3)
+  packageQuantity   Decimal   @default(0) @map("package_quantity") @db.Decimal(14, 3)
+  boxQuantity       Decimal   @default(0) @map("box_quantity") @db.Decimal(14, 3)
+  unitQuantity      Decimal   @default(0) @map("unit_quantity") @db.Decimal(14, 3)
+  reason            String    @db.VarChar(160)
+  occurredAt        DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  product           Product @relation(fields: [productId], references: [id])
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+
+  @@map("finished_stock_movements")
+}
+
+model TimeClockRecord {
+  id          Int       @id @default(autoincrement())
+  employeeId  Int       @map("employee_id")
+  eventType   String    @map("event_type") @db.VarChar(40)
+  occurredAt  DateTime  @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, occurredAt])
+  @@map("time_clock_records")
+}
+
+model IntegrationLog {
+  id                Int       @id @default(autoincrement())
+  integrationName   String    @map("integration_name") @db.VarChar(80)
+  action            String    @db.VarChar(120)
+  status            String    @db.VarChar(40)
+  payload           Json      @default("{}")
+  response          Json?
+  productionBatchId Int?      @map("production_batch_id")
+  productId         Int?      @map("product_id")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  productionBatch   ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+  product           Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@map("integrations_logs")
+}
+
+model ProductionScanMovement {
+  id                   Int       @id @default(autoincrement())
+  scannedCode          String    @map("scanned_code") @db.VarChar(180)
+  codeType             String    @map("code_type") @db.VarChar(40)
+  scannedByEmployeeId  Int?      @map("scanned_by_employee_id")
+  producedByEmployeeId Int?      @map("produced_by_employee_id")
+  wrappedByEmployeeId  Int?      @map("wrapped_by_employee_id")
+  packedByEmployeeId   Int?      @map("packed_by_employee_id")
+  productId            Int       @map("product_id")
+  productionBatchId    Int?      @map("production_batch_id")
+  packageQuantity      Decimal   @default(0) @map("package_quantity") @db.Decimal(14, 3)
+  boxQuantity          Decimal   @default(0) @map("box_quantity") @db.Decimal(14, 3)
+  unitQuantity         Decimal   @default(0) @map("unit_quantity") @db.Decimal(14, 3)
+  previousStage        String    @map("previous_stage") @db.VarChar(60)
+  newStage             String    @map("new_stage") @db.VarChar(60)
+  productionHours      Decimal   @default(0) @map("production_hours") @db.Decimal(10, 3)
+  packagesPerHour      Decimal   @default(0) @map("packages_per_hour") @db.Decimal(14, 4)
+  costPerHour          Decimal   @default(0) @map("cost_per_hour") @db.Decimal(14, 4)
+  costPerPackage       Decimal   @default(0) @map("cost_per_package") @db.Decimal(14, 4)
+  costPerBox           Decimal   @default(0) @map("cost_per_box") @db.Decimal(14, 4)
+  minutesPerPackage    Decimal   @default(0) @map("minutes_per_package") @db.Decimal(14, 4)
+  minutesPerBox        Decimal   @default(0) @map("minutes_per_box") @db.Decimal(14, 4)
+  materialCost         Decimal   @default(0) @map("material_cost") @db.Decimal(14, 4)
+  laborCost            Decimal   @default(0) @map("labor_cost") @db.Decimal(14, 4)
+  totalCost            Decimal   @default(0) @map("total_cost") @db.Decimal(14, 4)
+  rawMaterialsConsumed Json      @default("[]") @map("raw_materials_consumed")
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  scannedBy            Employee? @relation("ScannedBy", fields: [scannedByEmployeeId], references: [id])
+  producedBy           Employee? @relation("ProducedBy", fields: [producedByEmployeeId], references: [id])
+  wrappedBy            Employee? @relation("WrappedBy", fields: [wrappedByEmployeeId], references: [id])
+  packedBy             Employee? @relation("PackedBy", fields: [packedByEmployeeId], references: [id])
+  product              Product @relation(fields: [productId], references: [id])
+  productionBatch      ProductionBatch? @relation(fields: [productionBatchId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([productionBatchId])
+  @@index([scannedCode])
+  @@map("production_scan_movements")
+}
