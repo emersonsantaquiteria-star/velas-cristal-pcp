@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.env
+.env.*
+!.env.example
+!.env.local.example
+dist
+build
+.next
+.vercel
+.railway
+coverage
+.DS_Store
+npm-debug.log*
+package-lock.json
