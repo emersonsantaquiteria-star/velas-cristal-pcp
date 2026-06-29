@@ -1,0 +1,31 @@
+{
+  "name": "velas-cristal-backend",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "prisma generate && nodemon src/server.js",
+    "build": "prisma generate",
+    "start": "prisma migrate deploy && node src/server.js",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "node src/database/seed.js",
+    "prisma:generate": "prisma generate",
+    "check": "node --check src/server.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "prisma": "^6.1.0"
+  }
+}
